@@ -207,18 +207,43 @@ fn split_on_blank_lines(text: &str) -> Vec<String> {
 }
 
 /// Splits text into chunks based on line boundaries to ensure size constraints.
+/// If a single line exceeds `max_chars`, it is further split at word boundaries.
+/// A single word longer than `max_chars` is emitted intact (no mid-word splits).
 fn split_on_lines(text: &str, max_chars: usize) -> Vec<String> {
     let mut chunks = Vec::with_capacity(text.len() / max_chars.max(1) + 1);
     let mut current = String::new();
 
     for line in text.lines() {
-        // If the current line itself is larger than max_chars, it will be added anyway.
-        // We don't currently split *within* a single line.
+        // If adding this line would exceed the budget, flush current chunk first.
         if current.len() + line.len() + 1 > max_chars && !current.is_empty() {
             chunks.push(std::mem::take(&mut current));
         }
-        current.push_str(line);
-        current.push('\n');
+
+        // If the line itself fits within max_chars, append it directly.
+        if line.len() <= max_chars {
+            current.push_str(line);
+            current.push('\n');
+        } else {
+            // Line exceeds max_chars — split at word boundaries.
+            for word in line.split_whitespace() {
+                if current.is_empty() {
+                    // Starting a fresh chunk with this word.
+                    current.push_str(word);
+                } else if current.len() + 1 + word.len() > max_chars {
+                    // Adding this word would exceed budget — flush and start new chunk.
+                    chunks.push(std::mem::take(&mut current));
+                    current.push_str(word);
+                } else {
+                    // Word fits — append with a space separator.
+                    current.push(' ');
+                    current.push_str(word);
+                }
+            }
+            // Add trailing newline to match original behaviour.
+            if !current.is_empty() {
+                current.push('\n');
+            }
+        }
     }
 
     if !current.is_empty() {
@@ -388,12 +413,33 @@ mod tests {
     }
 
     #[test]
-    fn very_long_single_line_no_newlines() {
-        // One giant line with no newlines — can't split on lines effectively
+    fn very_long_single_line_splits_at_word_boundaries() {
+        // 25,000 chars, zero newlines — should be split into chunks ≤ 200 chars
         let text = "word ".repeat(5000);
-        let chunks = chunk_markdown(&text, 50);
-        // Should produce at least 1 chunk without panicking
-        assert!(!chunks.is_empty());
+        let chunks = chunk_markdown(&text, 50); // max_tokens=50 → max_chars=200
+        assert!(chunks.len() > 1, "expected multiple chunks, got {}", chunks.len());
+        for (i, chunk) in chunks.iter().enumerate() {
+            assert!(
+                chunk.content.len() <= 210,
+                "chunk {} is {} chars, exceeds budget: {:?}",
+                i,
+                chunk.content.len(),
+                &chunk.content[..chunk.content.len().min(80)]
+            );
+        }
+    }
+
+    #[test]
+    fn oversize_single_word_emitted_intact() {
+        // A single 500-char "word" with no whitespace must not be split mid-word
+        let long_word = "a".repeat(500);
+        let text = format!("hello {} world", long_word);
+        let chunks = chunk_markdown(&text, 50); // max_chars=200
+        let all_content: String = chunks.iter().map(|c| c.content.clone()).collect::<Vec<_>>().join("");
+        assert!(
+            all_content.contains(&long_word),
+            "oversize word was corrupted by splitting"
+        );
     }
 
     #[test]
