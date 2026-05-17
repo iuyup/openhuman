@@ -613,6 +613,53 @@ fn env_overlay_node_flags_respect_bool_parser() {
 }
 
 #[test]
+fn env_overlay_runtime_python_flags_respect_bool_parser() {
+    let mut cfg = Config::default();
+    let original_version = cfg.runtime_python.minimum_version.clone();
+
+    cfg.apply_env_overlay_with(
+        &HashMapEnv::new()
+            .with("OPENHUMAN_RUNTIME_PYTHON_ENABLED", "yes")
+            .with("OPENHUMAN_RUNTIME_PYTHON_PREFER_SYSTEM", "off")
+            .with("OPENHUMAN_RUNTIME_PYTHON_CACHE_DIR", "/tmp/oh-python")
+            .with("OPENHUMAN_RUNTIME_PYTHON_MANAGED_RELEASE_TAG", "20260510")
+            .with("OPENHUMAN_RUNTIME_PYTHON_PREFERRED_COMMAND", "python3.12"),
+    );
+    assert!(cfg.runtime_python.enabled);
+    assert!(!cfg.runtime_python.prefer_system);
+    assert_eq!(cfg.runtime_python.cache_dir, "/tmp/oh-python");
+    assert_eq!(cfg.runtime_python.managed_release_tag, "20260510");
+    assert_eq!(cfg.runtime_python.preferred_command, "python3.12");
+    assert_eq!(
+        cfg.runtime_python.minimum_version, original_version,
+        "untouched keys stay at defaults"
+    );
+
+    cfg.apply_env_overlay_with(
+        &HashMapEnv::new().with("OPENHUMAN_RUNTIME_PYTHON_ENABLED", "perhaps"),
+    );
+    assert!(cfg.runtime_python.enabled);
+
+    cfg.apply_env_overlay_with(
+        &HashMapEnv::new().with("OPENHUMAN_RUNTIME_PYTHON_MINIMUM_VERSION", "   "),
+    );
+    assert_eq!(cfg.runtime_python.minimum_version, original_version);
+
+    cfg.runtime_python.cache_dir = "/tmp/seed".into();
+    cfg.runtime_python.managed_release_tag = "20260510".into();
+    cfg.runtime_python.preferred_command = "python3.12".into();
+    cfg.apply_env_overlay_with(
+        &HashMapEnv::new()
+            .with("OPENHUMAN_RUNTIME_PYTHON_CACHE_DIR", "   ")
+            .with("OPENHUMAN_RUNTIME_PYTHON_MANAGED_RELEASE_TAG", "   ")
+            .with("OPENHUMAN_RUNTIME_PYTHON_PREFERRED_COMMAND", "   "),
+    );
+    assert_eq!(cfg.runtime_python.cache_dir, "");
+    assert_eq!(cfg.runtime_python.managed_release_tag, "");
+    assert_eq!(cfg.runtime_python.preferred_command, "");
+}
+
+#[test]
 fn env_overlay_sentry_dsn_trims_and_ignores_blank() {
     let mut cfg = Config::default();
     cfg.observability.sentry_dsn = None;
@@ -1151,7 +1198,6 @@ async fn load_or_init_for_workspace(root: &std::path::Path) -> Config {
 
 #[tokio::test]
 async fn load_or_init_recovers_from_backup_when_config_corrupted() {
-    let _g = env_lock();
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
 
@@ -1193,7 +1239,6 @@ default_temperature = 0.7
 
 #[tokio::test]
 async fn load_or_init_falls_back_to_defaults_when_backup_also_corrupted() {
-    let _g = env_lock();
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
 
@@ -1230,7 +1275,6 @@ async fn load_or_init_falls_back_to_defaults_when_backup_also_corrupted() {
 
 #[tokio::test]
 async fn load_or_init_falls_back_to_defaults_when_no_backup() {
-    let _g = env_lock();
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
 
@@ -1257,7 +1301,6 @@ async fn load_or_init_falls_back_to_defaults_when_no_backup() {
 
 #[tokio::test]
 async fn load_or_init_does_not_trigger_recovery_on_valid_config() {
-    let _g = env_lock();
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
 

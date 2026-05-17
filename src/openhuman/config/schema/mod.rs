@@ -3,7 +3,10 @@
 //! Split into submodules; this module re-exports the main `Config` and all public types.
 
 pub mod cloud_providers;
-pub use cloud_providers::{generate_provider_id, CloudProviderCreds, CloudProviderType};
+pub use cloud_providers::{
+    generate_provider_id, is_slug_reserved, migrate_legacy_fields, AuthStyle, CloudProviderCreds,
+    CloudProviderType,
+};
 mod accessibility;
 mod agent;
 mod autocomplete;
@@ -27,6 +30,7 @@ mod observability;
 mod proxy;
 mod routes;
 mod runtime;
+mod runtime_python;
 mod scheduler_gate;
 mod storage_memory;
 mod tools;
@@ -58,6 +62,7 @@ pub use proxy::{
 };
 pub use routes::{EmbeddingRouteConfig, ModelRouteConfig};
 pub use runtime::{DockerRuntimeConfig, ReliabilityConfig, RuntimeConfig, SchedulerConfig};
+pub use runtime_python::RuntimePythonConfig;
 pub use scheduler_gate::{SchedulerGateConfig, SchedulerGateMode};
 pub use storage_memory::{
     LlmBackend, MemoryConfig, MemoryTreeConfig, StorageConfig, StorageProviderConfig,
@@ -65,8 +70,9 @@ pub use storage_memory::{
 };
 pub use tools::{
     BrowserComputerUseConfig, BrowserConfig, ComposioConfig, ComputerControlConfig, CurlConfig,
-    GitbooksConfig, HttpRequestConfig, IntegrationToggle, IntegrationsConfig, MultimodalConfig,
-    SecretsConfig, SeltzConfig, WebSearchConfig, COMPOSIO_MODE_BACKEND, COMPOSIO_MODE_DIRECT,
+    GitbooksConfig, HttpRequestConfig, IntegrationToggle, IntegrationsConfig, McpAuthConfig,
+    McpClientConfig, McpClientIdentityConfig, McpServerConfig, MultimodalConfig, SecretsConfig,
+    SeltzConfig, WebSearchConfig, COMPOSIO_MODE_BACKEND, COMPOSIO_MODE_DIRECT,
 };
 pub use update::{UpdateConfig, UpdateRestartStrategy};
 mod voice_server;

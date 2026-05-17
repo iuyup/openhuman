@@ -586,7 +586,7 @@ impl Agent {
                 .unwrap_or(config.default_temperature)
         );
 
-        Self::build_session_agent_inner(config, agent_id, target_def.as_ref(), None)
+        Self::build_session_agent_inner(config, agent_id, target_def.as_ref(), None, None)
     }
 
     /// Same as [`Self::from_config_for_agent`] but also appends a
@@ -617,6 +617,49 @@ impl Agent {
             agent_id,
             target_def.as_ref(),
             Some(reflection_chunks),
+            None,
+        )
+    }
+
+    /// Construct a session agent with optional reflection memory chunks and an
+    /// additional profile prompt section. Used by the web channel when the user
+    /// selects a persistent agent profile for the thread.
+    pub fn from_config_for_agent_with_profile(
+        config: &Config,
+        agent_id: &str,
+        reflection_chunks: Option<Vec<crate::openhuman::subconscious::SourceChunk>>,
+        profile_prompt_suffix: Option<String>,
+    ) -> Result<Self> {
+        let target_def: Option<crate::openhuman::agent::harness::definition::AgentDefinition> =
+            match AgentDefinitionRegistry::global() {
+                Some(reg) => match reg.get(agent_id) {
+                    Some(def) => Some(def.clone()),
+                    None if agent_id == "orchestrator" => None,
+                    None => {
+                        return Err(anyhow::anyhow!(
+                            "agent definition '{}' not found in registry",
+                            agent_id
+                        ));
+                    }
+                },
+                None => {
+                    if agent_id != "orchestrator" {
+                        return Err(anyhow::anyhow!(
+                            "AgentDefinitionRegistry is not initialised — cannot \
+                         resolve agent '{}'. Call AgentDefinitionRegistry::init_global \
+                         at startup.",
+                            agent_id
+                        ));
+                    }
+                    None
+                }
+            };
+        Self::build_session_agent_inner(
+            config,
+            agent_id,
+            target_def.as_ref(),
+            reflection_chunks,
+            profile_prompt_suffix,
         )
     }
 
@@ -636,6 +679,7 @@ impl Agent {
         agent_id: &str,
         target_def: Option<&crate::openhuman::agent::harness::definition::AgentDefinition>,
         reflection_chunks: Option<Vec<crate::openhuman::subconscious::SourceChunk>>,
+        profile_prompt_suffix: Option<String>,
     ) -> Result<Self> {
         let runtime: Arc<dyn host_runtime::RuntimeAdapter> =
             Arc::from(host_runtime::create_runtime(&config.runtime)?);
@@ -724,8 +768,14 @@ impl Agent {
             secrets_encrypt: config.secrets.encrypt,
             reasoning_enabled: config.runtime.reasoning_enabled,
         };
+        let provider_role = match config.default_model.as_deref().map(str::trim) {
+            Some("hint:agentic") | Some("agentic-v1") => "agentic",
+            Some("hint:coding") | Some("coding-v1") => "coding",
+            Some("hint:summarization") | Some("summarization-v1") => "summarization",
+            _ => "reasoning",
+        };
         let (provider, model_name): (Box<dyn Provider>, String) =
-            crate::openhuman::providers::create_chat_provider("reasoning", config)?;
+            crate::openhuman::providers::create_chat_provider(provider_role, config)?;
 
         // Dispatcher selection is deferred until after the tool list is
         // finalised (orchestrator tools are appended below). We capture
@@ -848,6 +898,18 @@ impl Agent {
                 );
                 prompt_builder = prompt_builder.with_reflection_context(chunks);
             }
+        }
+        if let Some(suffix) = profile_prompt_suffix
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+        {
+            log::debug!(
+                "[agent:builder] profile prompt section injected suffix_chars={}",
+                suffix.chars().count()
+            );
+            prompt_builder = prompt_builder.add_section(Box::new(
+                crate::openhuman::agent::profiles::AgentProfilePromptSection::new(suffix),
+            ));
         }
 
         // Build post-turn hooks when learning is enabled
