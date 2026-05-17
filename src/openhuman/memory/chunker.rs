@@ -417,7 +417,11 @@ mod tests {
         // 25,000 chars, zero newlines — should be split into chunks ≤ 200 chars
         let text = "word ".repeat(5000);
         let chunks = chunk_markdown(&text, 50); // max_tokens=50 → max_chars=200
-        assert!(chunks.len() > 1, "expected multiple chunks, got {}", chunks.len());
+        assert!(
+            chunks.len() > 1,
+            "expected multiple chunks, got {}",
+            chunks.len()
+        );
         for (i, chunk) in chunks.iter().enumerate() {
             assert!(
                 chunk.content.len() <= 210,
@@ -435,7 +439,11 @@ mod tests {
         let long_word = "a".repeat(500);
         let text = format!("hello {} world", long_word);
         let chunks = chunk_markdown(&text, 50); // max_chars=200
-        let all_content: String = chunks.iter().map(|c| c.content.clone()).collect::<Vec<_>>().join("");
+        let all_content: String = chunks
+            .iter()
+            .map(|c| c.content.clone())
+            .collect::<Vec<_>>()
+            .join("");
         assert!(
             all_content.contains(&long_word),
             "oversize word was corrupted by splitting"
